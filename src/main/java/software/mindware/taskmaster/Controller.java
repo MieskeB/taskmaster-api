@@ -2,6 +2,7 @@ package software.mindware.taskmaster;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -54,7 +55,7 @@ public class Controller {
     @ApiResponse(responseCode = "403", description = "Invalid admin code")
     @PostMapping("/team")
     public ResponseEntity<String> createTeam(
-            @Parameter(description = "Admin code") String adminCode,
+            @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password")) String adminCode,
             @Parameter(description = "Team name") String teamName,
             @Parameter(description = "Team code") String code) {
         if (!this.adminCode.equals(adminCode)) {
@@ -72,7 +73,7 @@ public class Controller {
     @ApiResponse(responseCode = "403", description = "Invalid admin code")
     @GetMapping("/team")
     public ResponseEntity<?> getAllTeams(
-            @Parameter(description = "Admin code") String adminCode
+            @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password")) String adminCode
     ) {
         if (!this.adminCode.equals(adminCode)) {
             return ResponseEntity.status(403).body("{}");
@@ -187,7 +188,7 @@ public class Controller {
     @ApiResponse(responseCode = "403", description = "Invalid admin code")
     @PostMapping("/challenge/create")
     public ResponseEntity<String> createChallenge(
-            @Parameter(description = "Admin code") String adminCode,
+            @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password")) String adminCode,
             @Parameter(description = "Challenge title") String title,
             @Parameter(description = "Challenge description") String description,
             @Parameter(description = "Start date (e.g. 2025-06-03T15:00:00Z (UTC))") Instant startDate) {
@@ -209,7 +210,7 @@ public class Controller {
     @GetMapping("/challenge/{challengeId}/submissions")
     public ResponseEntity<Resource> downloadSubmissionsZip(
             @Parameter(description = "Challenge ID") @PathVariable Long challengeId,
-            @Parameter(description = "Admin code") @RequestParam String adminCode) {
+            @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password")) @RequestParam String adminCode) {
         if (!this.adminCode.equals(adminCode)) {
             return ResponseEntity.status(403).build();
         }
@@ -248,6 +249,89 @@ public class Controller {
             e.printStackTrace();
             return ResponseEntity.status(500).build();
         }
+    }
+
+    @Operation(summary = "Delete all submissions for a challenge from a team", tags = {"Administration"})
+    @ApiResponse(responseCode = "200", description = "Submissions deleted")
+    @ApiResponse(responseCode = "403", description = "Invalid admin code")
+    @DeleteMapping("/challenge/{challengeId}/submissions/{teamId}")
+    public ResponseEntity<String> deleteTeamSubmissionsForChallenge(
+            @PathVariable Long challengeId,
+            @PathVariable Long teamId,
+            @Parameter(schema = @Schema(type = "string", format = "password")) @RequestParam String adminCode) {
+
+        if (!this.adminCode.equals(adminCode)) {
+            return ResponseEntity.status(403).body("{}");
+        }
+
+        Optional<Team> optionalTeam = teamRepository.findById(teamId);
+        Optional<Challenge> optionalChallenge = challengeRepository.findById(challengeId);
+
+        if (optionalTeam.isEmpty() || optionalChallenge.isEmpty()) {
+            return ResponseEntity.badRequest().body("{}");
+        }
+
+        Team team = optionalTeam.get();
+        Challenge challenge = optionalChallenge.get();
+
+        List<Submission> submissions = submissionRepository.findAllByTeamAndChallenge(team, challenge);
+        for (Submission submission : submissions) {
+            Path filePath = Paths.get(uploadDir).resolve(submission.getFileName()).normalize();
+            try {
+                Files.deleteIfExists(filePath);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            submissionRepository.delete(submission);
+        }
+
+        return ResponseEntity.ok("{}");
+    }
+
+    @Operation(summary = "Delete a challenge and its submissions", tags = {"Administration"})
+    @ApiResponse(responseCode = "200", description = "Challenge deleted")
+    @ApiResponse(responseCode = "403", description = "Invalid admin code")
+    @DeleteMapping("/challenge/{challengeId}")
+    public ResponseEntity<String> deleteChallenge(
+            @PathVariable Long challengeId,
+            @Parameter(schema = @Schema(type = "string", format = "password")) @RequestParam String adminCode) {
+
+        if (!this.adminCode.equals(adminCode)) {
+            return ResponseEntity.status(403).body("{}");
+        }
+
+        Optional<Challenge> optionalChallenge = challengeRepository.findById(challengeId);
+        if (optionalChallenge.isEmpty()) {
+            return ResponseEntity.badRequest().body("{}");
+        }
+
+        Challenge challenge = optionalChallenge.get();
+        List<Submission> submissions = challenge.getSubmissions();
+        for (Submission submission : submissions) {
+            Path filePath = Paths.get(uploadDir).resolve(submission.getFileName()).normalize();
+            try {
+                Files.deleteIfExists(filePath);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            submissionRepository.delete(submission);
+        }
+
+        challengeRepository.delete(challenge);
+        return ResponseEntity.ok("{}");
+    }
+
+    @Operation(summary = "Get all challenges (admin-only)", tags = {"Administration"})
+    @ApiResponse(responseCode = "200", description = "List of all challenges")
+    @ApiResponse(responseCode = "403", description = "Invalid admin code")
+    @GetMapping("/challenge/all")
+    public ResponseEntity<?> getAllChallengesAdmin(
+            @Parameter(schema = @Schema(type = "string", format = "password")) @RequestParam String adminCode) {
+        if (!this.adminCode.equals(adminCode)) {
+            return ResponseEntity.status(403).body("{}");
+        }
+        List<Challenge> challenges = challengeRepository.findAll();
+        return ResponseEntity.ok(challenges);
     }
 
     private boolean isAllowedType(String contentType) {
