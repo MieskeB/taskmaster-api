@@ -5,7 +5,12 @@ import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.License;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.servers.Server;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @OpenAPIDefinition(
         info = @Info(
@@ -30,4 +35,14 @@ import org.springframework.context.annotation.Configuration;
 )
 @Configuration
 public class OpenApiConfig {
+    @Bean
+    public OpenAPI customOpenAPI() {
+        Server productionServer = new Server()
+                .url("https://api.taskmaster.michelbijnen.nl")
+                .description("Production server");
+        Server localServer = new Server()
+                .url("http://localhost:8080")
+                .description("Local development server");
+        return new OpenAPI().servers(List.of(productionServer, localServer));
+    }
 }
