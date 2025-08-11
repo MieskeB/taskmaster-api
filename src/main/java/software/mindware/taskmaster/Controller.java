@@ -191,7 +191,7 @@ public class Controller {
             @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password")) String adminCode,
             @Parameter(description = "Challenge title") String title,
             @Parameter(description = "Challenge description") String description,
-            @Parameter(description = "Start date (e.g. 2025-06-03T15:00:00Z (UTC))") Instant startDate) {
+            @Parameter(description = "Start date (e.g. 2025-06-03T15:00:00Z (UTC))", schema = @Schema(type = "string", format = "date-time")) Instant startDate) {
         if (!this.adminCode.equals(adminCode)) {
             return ResponseEntity.status(403).body("{}");
         }
