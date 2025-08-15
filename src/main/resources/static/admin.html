@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TaskMaster Admin</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, Arial;
+        }
+
+        .nav {
+            display: flex;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid #ddd;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .row {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1rem;
+        }
+
+        .btn {
+            cursor: pointer;
+            border: 1px solid #333;
+            background: #fff;
+            border-radius: 6px;
+            padding: 0.5rem 0.8rem;
+        }
+
+        .btn.primary {
+            background: #222;
+            color: #fff;
+            border-color: #222;
+        }
+
+        .btn.danger {
+            border-color: #b00020;
+            color: #b00020;
+        }
+
+        .btn.ghost {
+            border-color: #ddd;
+            color: #333;
+        }
+
+        .spacer {
+            flex: 1;
+        }
+
+        .notice {
+            padding: 0.5rem 0.75rem;
+            background: #f5f5f5;
+            border: 1px dashed #ddd;
+            border-radius: 6px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        input, select {
+            padding: 0.5rem;
+            font-size: 1rem;
+        }
+
+        input[type="datetime-local"] {
+            padding-right: 0.3rem;
+        }
+
+        h2, h3 {
+            margin-top: 0;
+        }
+
+        a {
+            color: inherit;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .tab {
+            padding: 0.45rem 0.7rem;
+            border: 1px solid #ddd;
+            border-radius: 16px;
+            cursor: pointer;
+            background: #fff;
+        }
+
+        .tab.active {
+            border-color: #222;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+<div class="nav">
+    <strong>TaskMaster Admin</strong>
+    <div class="spacer"></div>
+    <button id="logoutBtn" class="btn" title="Clears local admin settings">Logout</button>
+</div>
+<div class="container">
+    <div id="loginCard" class="card" style="max-width:560px;">
+        <h2>Admin Login</h2>
+        <div class="row" style="width:100%">
+            <div style="flex:1;">
+                <label for="apiBaseUrl">API Base URL</label>
+                <input id="apiBaseUrl" placeholder="http://localhost:8080" style="width:100%"/>
+                <div class="muted">Tip: defaults to this server’s origin.</div>
+            </div>
+            <div style="flex:1;">
+                <label for="adminCode">Admin Code</label>
+                <input id="adminCode" placeholder="supersecret" type="password" style="width:100%"/>
+            </div>
+            <div style="width:100%; display:flex; justify-content:flex-end">
+                <button id="saveLoginBtn" class="btn primary">Save</button>
+            </div>
+        </div>
+        <p class="notice">Your settings are stored locally in this browser only.</p>
+    </div>
+
+    <div id="app" style="display:none">
+        <div class="tabs">
+            <button class="tab active" data-tab="challenges">Challenges</button>
+            <button class="tab" data-tab="teams">Teams</button>
+        </div>
+
+        <section id="tab-challenges">
+            <div class="card">
+                <h3>Create Challenge</h3>
+                <div class="row">
+                    <div style="flex:1; min-width:240px;">
+                        <label for="chTitle">Title</label>
+                        <input id="chTitle"/>
+                    </div>
+                    <div style="flex:2; min-width:320px;">
+                        <label for="chDescription">Description</label>
+                        <input id="chDescription"/>
+                    </div>
+                    <div>
+                        <label for="chStart">Start Date</label>
+                        <input id="chStart" type="datetime-local"/>
+                    </div>
+                    <div class="spacer"></div>
+                    <button id="createChBtn" class="btn primary">Create</button>
+                </div>
+            </div>
+
+            <div id="challengesList" class="grid"></div>
+            <div id="chError" class="notice" style="display:none"></div>
+        </section>
+
+        <section id="tab-teams" style="display:none">
+            <div class="card">
+                <h3>Create Team</h3>
+                <div class="row">
+                    <div>
+                        <label for="teamName">Team name</label>
+                        <input id="teamName"/>
+                    </div>
+                    <div>
+                        <label for="teamCode">Team code</label>
+                        <input id="teamCode" type="password"/>
+                    </div>
+                    <div class="spacer"></div>
+                    <button id="createTeamBtn" class="btn primary">Create</button>
+                </div>
+            </div>
+
+            <div id="teamsList" class="grid"></div>
+            <div id="teamError" class="notice" style="display:none"></div>
+        </section>
+    </div>
+</div>
+
+<script>
+    (function () {
+        /** @typedef {{ id: number, title: string, description: string, startDate: string }} Challenge */
+        /** @typedef {{ id: number, teamName: string }} Team */
+
+        /** @type {HTMLInputElement} */ const apiBaseUrlInput = document.getElementById('apiBaseUrl');
+        /** @type {HTMLInputElement} */ const adminCodeInput = document.getElementById('adminCode');
+        /** @type {HTMLDivElement} */ const loginCard = document.getElementById('loginCard');
+        /** @type {HTMLDivElement} */ const app = document.getElementById('app');
+        /** @type {HTMLButtonElement} */ const saveLoginBtn = document.getElementById('saveLoginBtn');
+        /** @type {HTMLButtonElement} */ const logoutBtn = document.getElementById('logoutBtn');
+
+        const tabs = Array.from(document.querySelectorAll('.tab'));
+        /** @type {HTMLElement} */ const tabChallenges = document.getElementById('tab-challenges');
+        /** @type {HTMLElement} */ const tabTeams = document.getElementById('tab-teams');
+
+        function setActiveTab(name) {
+            tabs.forEach(t => t.classList.remove('active'));
+            tabs.find(t => t.dataset.tab === name)?.classList.add('active');
+            tabChallenges.style.display = name === 'challenges' ? '' : 'none';
+            tabTeams.style.display = name === 'teams' ? '' : 'none';
+            if (name === 'challenges') {
+                void refreshChallenges();
+            } else {
+                void refreshTeams();
+            }
+        }
+
+        tabs.forEach(btn => btn.addEventListener('click', () => setActiveTab(btn.dataset.tab)));
+
+        const store = {
+            get base() {
+                return localStorage.getItem('apiBaseUrl') || '';
+            },
+            set base(v) {
+                localStorage.setItem('apiBaseUrl', v);
+            },
+            get code() {
+                return localStorage.getItem('adminCode') || '';
+            },
+            set code(v) {
+                localStorage.setItem('adminCode', v);
+            },
+            clear() {
+                localStorage.removeItem('apiBaseUrl');
+                localStorage.removeItem('adminCode');
+            }
+        };
+
+        const state = {/** @type {Team[]} */ teams: []};
+
+        function updateAuthUI() {
+            const hasAuth = !!store.base && !!store.code;
+            loginCard.style.display = hasAuth ? 'none' : '';
+            app.style.display = hasAuth ? '' : 'none';
+        }
+
+        function initLoginForm() {
+            const defaultBase = (location.origin && location.origin !== 'null') ? location.origin : 'http://localhost:8080';
+            apiBaseUrlInput.value = store.base || defaultBase;
+            adminCodeInput.value = store.code || '';
+            saveLoginBtn.onclick = () => {
+                const base = apiBaseUrlInput.value.trim().replace(/\/$/, '');
+                const code = adminCodeInput.value.trim();
+                if (!base || !code) {
+                    alert('Please fill both fields');
+                    return;
+                }
+                store.base = base;
+                store.code = code;
+                updateAuthUI();
+                void refreshTeams().then(refreshChallenges);
+            };
+            logoutBtn.onclick = () => {
+                store.clear();
+                updateAuthUI();
+            };
+        }
+
+        /**
+         * @template T
+         * @param {string} path
+         * @param {RequestInit} [init]
+         * @returns {Promise<T>}
+         */
+        async function http(path, init = {}) {
+            const url = store.base + path;
+            const res = await fetch(url, init);
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error('HTTP ' + res.status + ': ' + text);
+            }
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+                // @ts-ignore
+                return await res.json();
+            }
+            // @ts-ignore
+            return undefined;
+        }
+
+        /**
+         * @param {Record<string, string>} params
+         * @returns {string}
+         */
+        function formBody(params) {
+            return new URLSearchParams(params).toString();
+        }
+
+        // ---------- Challenges ----------
+        /** @type {HTMLDivElement} */ const challengesList = document.getElementById('challengesList');
+        /** @type {HTMLDivElement} */ const chError = document.getElementById('chError');
+        /** @type {HTMLInputElement} */ const chTitle = document.getElementById('chTitle');
+        /** @type {HTMLInputElement} */ const chDescription = document.getElementById('chDescription');
+        /** @type {HTMLInputElement} */ const chStart = document.getElementById('chStart');
+        /** @type {HTMLButtonElement} */ const createChBtn = document.getElementById('createChBtn');
+
+        async function refreshChallenges() {
+            if (!store.base || !store.code) return;
+            chError.style.display = 'none';
+            challengesList.innerHTML = '<p>Loading…</p>';
+            try {
+                const qs = new URLSearchParams({adminCode: store.code}).toString();
+                /** @type {Challenge[]} */
+                const data = await http('/challenge/all?' + qs);
+                challengesList.innerHTML = '';
+                data.forEach(c => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    const selectId = 'teamSelect-' + c.id;
+
+                    const options = state.teams.length
+                        ? state.teams.map(t => `<option value="${t.id}">${escapeHtml(t.teamName)}</option>`).join('')
+                        : '<option disabled selected>— load teams first —</option>';
+
+                    card.innerHTML = `
+            <h3>${escapeHtml(c.title)}</h3>
+            <p style="white-space: pre-wrap">${escapeHtml(c.description)}</p>
+            <p><strong>Starts:</strong> ${new Date(c.startDate).toLocaleString()}</p>
+
+            <div class="row" style="gap:0.5rem; margin-top:0.5rem;">
+              <button class="btn" data-action="download" data-id="${c.id}">Download submissions (zip)</button>
+
+              <div class="spacer"></div>
+
+              <label for="${selectId}">Team</label>
+              <select id="${selectId}" data-chid="${c.id}" style="min-width: 160px;">${options}</select>
+              <button class="btn ghost" data-action="refresh-teams" data-id="${c.id}">↻ Teams</button>
+              <button class="btn danger" data-action="delete-team" data-id="${c.id}">Delete team submissions</button>
+
+              <div class="spacer"></div>
+
+              <button class="btn danger" data-action="delete" data-id="${c.id}">Delete challenge</button>
+            </div>`;
+
+                    card.addEventListener('click', async (ev) => {
+                        const t = /** @type {HTMLElement} */(ev.target);
+                        const idAttr = t.getAttribute('data-id');
+                        if (!idAttr) return;
+                        const challengeId = Number(idAttr);
+                        const action = t.getAttribute('data-action');
+
+                        if (action === 'download') {
+                            try {
+                                const qs = new URLSearchParams({adminCode: store.code}).toString();
+                                const res = await fetch(store.base + '/challenge/' + challengeId + '/submissions?' + qs);
+                                if (!res.ok) throw new Error('HTTP ' + res.status);
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'challenge-' + challengeId + '-submissions.zip';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            } catch (e) {
+                                alert(e);
+                            }
+
+                        } else if (action === 'delete') {
+                            if (!confirm('Delete this challenge (and all its submissions)?')) return;
+                            try {
+                                const qs = new URLSearchParams({adminCode: store.code}).toString();
+                                await http('/challenge/' + challengeId + '?' + qs, {method: 'DELETE'});
+                                await refreshChallenges();
+                            } catch (e) {
+                                alert(e);
+                            }
+
+                        } else if (action === 'delete-team') {
+                            /** @type {HTMLSelectElement|null} */
+                            const sel = document.getElementById('teamSelect-' + challengeId);
+                            if (!sel || !sel.value) {
+                                alert('Select a team first.');
+                                return;
+                            }
+                            const teamId = Number(sel.value);
+                            if (!confirm('Delete all submissions from this team for this challenge?')) return;
+                            try {
+                                const qs = new URLSearchParams({adminCode: store.code}).toString();
+                                await http('/challenge/' + challengeId + '/submissions/' + teamId + '?' + qs, {method: 'DELETE'});
+                                alert('Team submissions deleted.');
+                            } catch (e) {
+                                alert(e);
+                            }
+
+                        } else if (action === 'refresh-teams') {
+                            await refreshTeams();
+                            await refreshChallenges();
+                        }
+                    });
+                    challengesList.appendChild(card);
+                });
+            } catch (e) {
+                chError.textContent = String(e);
+                chError.style.display = '';
+                challengesList.innerHTML = '';
+            }
+        }
+
+        createChBtn.onclick = async () => {
+            try {
+                const start = chStart.value ? new Date(chStart.value).toISOString() : new Date().toISOString();
+                const body = formBody({
+                    adminCode: store.code,
+                    title: chTitle.value,
+                    description: chDescription.value,
+                    startDate: start
+                });
+                await http('/challenge/create', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body
+                });
+                chTitle.value = '';
+                chDescription.value = '';
+                chStart.value = '';
+                await refreshChallenges();
+            } catch (e) {
+                alert(e);
+            }
+        };
+
+        // ---------- Teams ----------
+        /** @type {HTMLDivElement} */ const teamsList = document.getElementById('teamsList');
+        /** @type {HTMLDivElement} */ const teamError = document.getElementById('teamError');
+        /** @type {HTMLInputElement} */ const teamName = document.getElementById('teamName');
+        /** @type {HTMLInputElement} */ const teamCode = document.getElementById('teamCode');
+        /** @type {HTMLButtonElement} */ const createTeamBtn = document.getElementById('createTeamBtn');
+
+        async function refreshTeams() {
+            if (!store.base || !store.code) return;
+            teamError.style.display = 'none';
+            teamsList.innerHTML = '<p>Loading…</p>';
+            try {
+                const qs = new URLSearchParams({adminCode: store.code}).toString();
+                /** @type {Team[]} */
+                const data = await http('/team?' + qs);
+                state.teams = data;
+                teamsList.innerHTML = '';
+                data.forEach(t => {
+                    const card = document.createElement('div');
+                    card.className = 'card';
+                    const inputId = `newCode-${t.id}`;
+                    card.innerHTML = `
+  <h3>${escapeHtml(t.teamName)}</h3>
+  <p class="muted">ID: ${t.id}</p>
+
+  <div class="row" style="margin-top:0.5rem">
+    <div>
+      <label for="${inputId}">New code</label>
+      <input id="${inputId}" type="password" placeholder="enter new code"/>
+    </div>
+    <button class="btn" data-action="update-code" data-id="${t.id}">Update code</button>
+    <div class="spacer"></div>
+    <button class="btn danger" data-action="delete-team" data-id="${t.id}">Delete team</button>
+  </div>
+`;
+                    card.addEventListener('click', async (ev) => {
+                        const target = /** @type {HTMLElement} */(ev.target);
+                        const action = target.getAttribute('data-action');
+                        if (!action) return;
+
+                        const teamId = Number(target.getAttribute('data-id') || '0');
+                        if (!teamId) return;
+
+                        if (action === 'update-code') {
+                            /** @type {HTMLInputElement|null} */
+                            const input = document.getElementById(`newCode-${teamId}`);
+                            const newCode = (input && input.value) ? input.value.trim() : '';
+                            if (!newCode) {
+                                alert('Please enter the new team code');
+                                return;
+                            }
+                            try {
+                                const body = new URLSearchParams({adminCode: store.code, code: newCode}).toString();
+                                await http(`/team/${teamId}/code`, {
+                                    method: 'PATCH',
+                                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                                    body
+                                });
+                                if (input) input.value = '';
+                                alert('Team code updated.');
+                            } catch (e) {
+                                alert(e);
+                            }
+                            return;
+                        }
+
+                        if (action === 'delete-team') {
+                            if (!confirm('Delete this team and all its submissions?')) return;
+                            try {
+                                const qs = new URLSearchParams({adminCode: store.code}).toString();
+                                await http('/team/' + teamId + '?' + qs, {method: 'DELETE'});
+                                await refreshTeams();
+                                await refreshChallenges(); // keep challenge team dropdowns in sync
+                            } catch (e) {
+                                alert(e);
+                            }
+                            return;
+                        }
+                    });
+                    teamsList.appendChild(card);
+                });
+                return data;
+            } catch (e) {
+                teamError.textContent = String(e);
+                teamError.style.display = '';
+                teamsList.innerHTML = '';
+            }
+        }
+
+        createTeamBtn.onclick = async () => {
+            try {
+                const body = formBody({adminCode: store.code, teamName: teamName.value, code: teamCode.value});
+                await http('/team', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body
+                });
+                teamName.value = '';
+                teamCode.value = '';
+                await refreshTeams();
+                await refreshChallenges();
+            } catch (e) {
+                alert(e);
+            }
+        };
+
+        function escapeHtml(s) {
+            return s
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        // Init
+        initLoginForm();
+        updateAuthUI();
+        if (store.base && store.code) {
+            void refreshTeams().then(refreshChallenges);
+        }
+    })();
+</script>
+</body>
+</html>

@@ -337,4 +337,65 @@ public class Controller {
     private boolean isAllowedType(String contentType) {
         return contentType.startsWith("image/") || contentType.startsWith("video/");
     }
+
+    @Operation(summary = "Delete a team and its submissions", tags = {"Administration"})
+    @ApiResponse(responseCode = "200", description = "Team deleted")
+    @ApiResponse(responseCode = "403", description = "Invalid admin code")
+    @DeleteMapping("/team/{teamId}")
+    public ResponseEntity<?> deleteTeam(@PathVariable Long teamId,
+                                        @Parameter(schema = @Schema(type = "string", format = "password")) @RequestParam String adminCode) {
+        if (!this.adminCode.equals(adminCode)) {
+            return ResponseEntity.status(403).body("{}");
+        }
+
+        Optional<Team> optionalTeam = teamRepository.findById(teamId);
+        if (optionalTeam.isEmpty()) {
+            return ResponseEntity.badRequest().body("{}");
+        }
+
+        Team team = optionalTeam.get();
+        List<Submission> submissions = team.getSubmission();
+        for (Submission submission : submissions) {
+            Path filePath = Paths.get(uploadDir).resolve(submission.getFileName()).normalize();
+            try {
+                Files.deleteIfExists(filePath);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            submissionRepository.delete(submission);
+        }
+
+        teamRepository.delete(team);
+        return ResponseEntity.ok("{}");
+    }
+
+    @Operation(summary = "Update a team's code", tags = {"Administration"})
+    @ApiResponse(responseCode = "200", description = "Team code updated")
+    @ApiResponse(responseCode = "400", description = "Invalid request")
+    @ApiResponse(responseCode = "403", description = "Invalid admin code")
+    @PatchMapping("/team/{teamId}/code")
+    public ResponseEntity<?> updateTeamCode(
+            @PathVariable Long teamId,
+            @Parameter(schema = @Schema(type = "string", format = "password"))
+            @RequestParam String adminCode,
+            @Parameter(description = "New team code")
+            @RequestParam String code
+    ) {
+        if (!this.adminCode.equals(adminCode)) {
+            return ResponseEntity.status(403).body("{}");
+        }
+        if (code == null || code.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("{\"error\":\"code must not be empty\"}");
+        }
+
+        Optional<Team> optionalTeam = teamRepository.findById(teamId);
+        if (optionalTeam.isEmpty()) {
+            return ResponseEntity.badRequest().body("{}");
+        }
+
+        Team team = optionalTeam.get();
+        team.setCode(code.trim());
+        teamRepository.save(team);
+        return ResponseEntity.ok("{}");
+    }
 }
