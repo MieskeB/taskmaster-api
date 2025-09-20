@@ -318,6 +318,23 @@
             return new URLSearchParams(params).toString();
         }
 
+        /**
+         * Fetch submission count for a team, optionally for a specific challenge.
+         * Uses /team/{teamId}/submissions/count?adminCode=...&challengeId=...
+         * @param {number} teamId
+         * @param {number|undefined|null} challengeId
+         * @returns {Promise<number>}
+         */
+        async function fetchTeamSubmissionCount(teamId, challengeId) {
+            const params = new URLSearchParams({adminCode: store.code});
+            if (challengeId !== undefined && challengeId !== null) {
+                params.set('challengeId', String(challengeId));
+            }
+            /** @type {{ teamId: number, challengeId: number|null, count: number }} */
+            const res = await http(`/team/${teamId}/submissions/count?` + params.toString());
+            return (typeof res?.count === 'number') ? res.count : 0;
+        }
+
         // ---------- Challenges ----------
         /** @type {HTMLDivElement} */ const challengesList = document.getElementById('challengesList');
         /** @type {HTMLDivElement} */ const chError = document.getElementById('chError');
@@ -345,24 +362,27 @@
                         : '<option disabled selected>— load teams first —</option>';
 
                     card.innerHTML = `
-            <h3>${escapeHtml(c.title)}</h3>
-            <p style="white-space: pre-wrap">${escapeHtml(c.description)}</p>
-            <p><strong>Starts:</strong> ${new Date(c.startDate).toLocaleString()}</p>
+  <h3>${escapeHtml(c.title)}</h3>
+  <p style="white-space: pre-wrap">${escapeHtml(c.description)}</p>
+  <p><strong>Starts:</strong> ${new Date(c.startDate).toLocaleString()}</p>
 
-            <div class="row" style="gap:0.5rem; margin-top:0.5rem;">
-              <button class="btn" data-action="download" data-id="${c.id}">Download submissions (zip)</button>
+  <div class="row" style="gap:0.5rem; margin-top:0.5rem;">
+    <button class="btn" data-action="download" data-id="${c.id}">Download submissions (zip)</button>
 
-              <div class="spacer"></div>
+    <div class="spacer"></div>
 
-              <label for="${selectId}">Team</label>
-              <select id="${selectId}" data-chid="${c.id}" style="min-width: 160px;">${options}</select>
-              <button class="btn ghost" data-action="refresh-teams" data-id="${c.id}">↻ Teams</button>
-              <button class="btn danger" data-action="delete-team" data-id="${c.id}">Delete team submissions</button>
+    <label for="${selectId}">Team</label>
+    <select id="${selectId}" data-chid="${c.id}" style="min-width: 160px;">${options}</select>
+    <button class="btn ghost" data-action="refresh-teams" data-id="${c.id}">↻ Teams</button>
+    <button class="btn" data-action="count" data-id="${c.id}">Count submissions</button>
+    <span id="count-pill-${c.id}" class="notice" style="display:none"></span>
+    <button class="btn danger" data-action="delete-team" data-id="${c.id}">Delete team submissions</button>
 
-              <div class="spacer"></div>
+    <div class="spacer"></div>
 
-              <button class="btn danger" data-action="delete" data-id="${c.id}">Delete challenge</button>
-            </div>`;
+    <button class="btn danger" data-action="delete" data-id="${c.id}">Delete challenge</button>
+  </div>`;
+
 
                     card.addEventListener('click', async (ev) => {
                         const t = /** @type {HTMLElement} */(ev.target);
@@ -396,6 +416,34 @@
                             } catch (e) {
                                 alert(e);
                             }
+
+                        } else if (action === 'count') {
+                            /** @type {HTMLSelectElement|null} */
+                            const sel = document.getElementById('teamSelect-' + challengeId);
+                            if (!sel || !sel.value) {
+                                alert('Select a team first.');
+                                return;
+                            }
+                            const teamId = Number(sel.value);
+                            const pill = /** @type {HTMLSpanElement|null} */(document.getElementById('count-pill-' + challengeId));
+                            try {
+                                if (pill) {
+                                    pill.style.display = '';
+                                    pill.textContent = 'Counting…';
+                                }
+                                const count = await fetchTeamSubmissionCount(teamId, challengeId);
+                                if (pill) {
+                                    pill.style.display = '';
+                                    pill.textContent = `Submissions: ${count}`;
+                                }
+                            } catch (e) {
+                                if (pill) {
+                                    pill.style.display = '';
+                                    pill.textContent = 'Error';
+                                }
+                                alert(e);
+                            }
+
 
                         } else if (action === 'delete-team') {
                             /** @type {HTMLSelectElement|null} */
@@ -482,10 +530,18 @@
       <input id="${inputId}" type="password" placeholder="enter new code"/>
     </div>
     <button class="btn" data-action="update-code" data-id="${t.id}">Update code</button>
+
     <div class="spacer"></div>
+
+    <button class="btn" data-action="count-current" data-id="${t.id}">Count (current challenge)</button>
+    <span id="team-count-pill-${t.id}" class="notice" style="display:none"></span>
+
+    <div class="spacer"></div>
+
     <button class="btn danger" data-action="delete-team" data-id="${t.id}">Delete team</button>
   </div>
 `;
+
                     card.addEventListener('click', async (ev) => {
                         const target = /** @type {HTMLElement} */(ev.target);
                         const action = target.getAttribute('data-action');
@@ -512,6 +568,29 @@
                                 if (input) input.value = '';
                                 alert('Team code updated.');
                             } catch (e) {
+                                alert(e);
+                            }
+                            return;
+                        }
+
+                        if (action === 'count-current') {
+                            const pill = /** @type {HTMLSpanElement|null} */(document.getElementById('team-count-pill-' + teamId));
+                            try {
+                                if (pill) {
+                                    pill.style.display = '';
+                                    pill.textContent = 'Counting…';
+                                }
+                                // No challengeId → backend uses the current active challenge
+                                const count = await fetchTeamSubmissionCount(teamId, undefined);
+                                if (pill) {
+                                    pill.style.display = '';
+                                    pill.textContent = `Submissions (current): ${count}`;
+                                }
+                            } catch (e) {
+                                if (pill) {
+                                    pill.style.display = '';
+                                    pill.textContent = 'Error';
+                                }
                                 alert(e);
                             }
                             return;

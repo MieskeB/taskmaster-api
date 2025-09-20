@@ -398,4 +398,50 @@ public class Controller {
         teamRepository.save(team);
         return ResponseEntity.ok("{}");
     }
+
+    @Operation(
+            summary = "Get submission count for a team (optionally for a specific challenge)",
+            description = "Returns the number of submissions a team has overall, or for a specific challenge if 'challengeId' is provided.",
+            tags = {"Administration"}
+    )
+    @ApiResponse(responseCode = "200", description = "Count returned")
+    @ApiResponse(responseCode = "400", description = "Invalid request")
+    @ApiResponse(responseCode = "403", description = "Invalid admin code")
+    @GetMapping("/team/{teamId}/submissions/count")
+    public ResponseEntity<String> getTeamSubmissionCount(
+            @PathVariable Long teamId,
+            @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password"))
+            @RequestParam String adminCode,
+            @Parameter(description = "Optional challenge ID to filter the count")
+            @RequestParam(required = false) Long challengeId
+    ) {
+        if (!this.adminCode.equals(adminCode)) {
+            return ResponseEntity.status(403).body("{}");
+        }
+
+        Optional<Team> optionalTeam = teamRepository.findById(teamId);
+        if (optionalTeam.isEmpty()) {
+            return ResponseEntity.badRequest().body("{}");
+        }
+        Team team = optionalTeam.get();
+
+        long count;
+        if (challengeId != null) {
+            Optional<Challenge> optionalChallenge = challengeRepository.findById(challengeId);
+            if (optionalChallenge.isEmpty()) {
+                return ResponseEntity.badRequest().body("{}");
+            }
+            Challenge challenge = optionalChallenge.get();
+            count = submissionRepository.countByTeamAndChallenge(team, challenge);
+            return ResponseEntity.ok("{\"teamId\":" + teamId + ",\"challengeId\":" + challengeId + ",\"count\":" + count + "}");
+        } else {
+            Optional<Challenge> optionalChallenge = challengeRepository.findFirstByStartDateBeforeOrderByStartDateDesc(Instant.now());
+            if (optionalChallenge.isEmpty()) {
+                return ResponseEntity.badRequest().body("{}");
+            }
+            Challenge challenge = optionalChallenge.get();
+            count = submissionRepository.countByTeamAndChallenge(team, challenge);
+            return ResponseEntity.ok("{\"teamId\":" + teamId + ",\"challengeId\":" + challengeId + ",\"count\":" + count + "}");
+        }
+    }
 }
