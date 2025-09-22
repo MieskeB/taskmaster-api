@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import software.mindware.taskmaster.dto.AuthRequest;
+import software.mindware.taskmaster.dto.CountResponse;
 import software.mindware.taskmaster.model.Challenge;
 import software.mindware.taskmaster.model.Submission;
 import software.mindware.taskmaster.model.Team;
@@ -408,7 +409,7 @@ public class Controller {
     @ApiResponse(responseCode = "400", description = "Invalid request")
     @ApiResponse(responseCode = "403", description = "Invalid admin code")
     @GetMapping("/team/{teamId}/submissions/count")
-    public ResponseEntity<String> getTeamSubmissionCount(
+    public ResponseEntity<?> getTeamSubmissionCount(
             @PathVariable Long teamId,
             @Parameter(description = "Admin code", schema = @Schema(type = "string", format = "password"))
             @RequestParam String adminCode,
@@ -433,7 +434,7 @@ public class Controller {
             }
             Challenge challenge = optionalChallenge.get();
             count = submissionRepository.countByTeamAndChallenge(team, challenge);
-            return ResponseEntity.ok("{\"teamId\":" + teamId + ",\"challengeId\":" + challengeId + ",\"count\":" + count + "}");
+            return ResponseEntity.ok(new CountResponse(teamId, challengeId, count));
         } else {
             Optional<Challenge> optionalChallenge = challengeRepository.findFirstByStartDateBeforeOrderByStartDateDesc(Instant.now());
             if (optionalChallenge.isEmpty()) {
@@ -441,7 +442,7 @@ public class Controller {
             }
             Challenge challenge = optionalChallenge.get();
             count = submissionRepository.countByTeamAndChallenge(team, challenge);
-            return ResponseEntity.ok("{\"teamId\":" + teamId + ",\"challengeId\":" + challengeId + ",\"count\":" + count + "}");
+            return ResponseEntity.ok(new CountResponse(teamId, -1, count));
         }
     }
 }
