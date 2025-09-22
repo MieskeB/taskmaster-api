@@ -127,6 +127,32 @@
             color: #666;
             font-size: 0.95rem;
         }
+        .zero-list { margin-top: 0.5rem; padding: 0.5rem; background: #fafafa; border: 1px dashed #ddd; border-radius: 6px; }
+        .zero-list ul { margin: 0.25rem 0 0 1rem; }
+        .count-list { margin-top: 0.5rem; }
+        .count-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.35rem 0.55rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            margin-top: 0.35rem;
+            font-size: 0.98rem;
+        }
+        .count-item .name { font-weight: 600; }
+        .count-item .num { font-variant-numeric: tabular-nums; }
+
+        .count-item.ok {
+            background: #eaf8ea;
+            border-color: #bfe5bf;
+            color: #0b5f0b;
+        }
+        .count-item.missing {
+            background: #ffe6e9;
+            border-color: #ffccd1;
+            color: #8a0010;
+        }
     </style>
 </head>
 <body>
@@ -335,6 +361,34 @@
             return (typeof res?.count === 'number') ? res.count : 0;
         }
 
+        /**
+         * Return all teams with their submission counts for a specific challenge.
+         * @param {number} challengeId
+         * @returns {Promise<Array<{ team: Team, count: number }>>}
+         */
+        async function fetchTeamSubmissionCountsForChallenge(challengeId) {
+            // Ensure we have the latest teams cached
+            if (!state.teams || state.teams.length === 0) {
+                await refreshTeams();
+            }
+
+            /** @type {Promise<{ team: Team, count: number }>[] } */
+            const jobs = state.teams.map((t) =>
+                fetchTeamSubmissionCount(t.id, challengeId)
+                    .then((count) => ({ team: t, count }))
+                    .catch(() => ({ team: t, count: -1 })) // mark errors as -1 so they appear neutral
+            );
+
+            const results = await Promise.all(jobs);
+            // Sort by missing first (0), then by name
+            return results.sort((a, b) => {
+                const ar = a.count === 0 ? 0 : 1;
+                const br = b.count === 0 ? 0 : 1;
+                if (ar !== br) return ar - br;
+                return a.team.teamName.localeCompare(b.team.teamName);
+            });
+        }
+
         // ---------- Challenges ----------
         /** @type {HTMLDivElement} */ const challengesList = document.getElementById('challengesList');
         /** @type {HTMLDivElement} */ const chError = document.getElementById('chError');
@@ -380,9 +434,15 @@
 
     <div class="spacer"></div>
 
+    <button class="btn" data-action="toggle-zero" data-id="${c.id}">Missing submissions ▾</button>
     <button class="btn danger" data-action="delete" data-id="${c.id}">Delete challenge</button>
-  </div>`;
+  </div>
 
+  <div id="zero-list-${c.id}" class="zero-list" style="display:none">
+    <div id="zero-list-status-${c.id}" class="muted">Loading…</div>
+    <div id="zero-list-content-${c.id}" style="display:none"></div>
+  </div>
+`;
 
                     card.addEventListener('click', async (ev) => {
                         const t = /** @type {HTMLElement} */(ev.target);
@@ -416,6 +476,70 @@
                             } catch (e) {
                                 alert(e);
                             }
+                            // --- ADD: toggle zero-submissions panel ---
+                        } else if (action === 'toggle-zero') {
+                            // ↓ Restore element lookups and toggle UI bits
+                            const wrap = /** @type {HTMLDivElement|null} */(document.getElementById('zero-list-' + challengeId));
+                            const status = /** @type {HTMLDivElement|null} */(document.getElementById('zero-list-status-' + challengeId));
+                            const content = /** @type {HTMLDivElement|null} */(document.getElementById('zero-list-content-' + challengeId));
+                            const btn = /** @type {HTMLButtonElement} */(t);
+
+                            if (!wrap || !status || !content) return;
+
+                            // Toggle visibility
+                            const isHidden = (wrap.style.display === 'none');
+                            if (!isHidden) {
+                                wrap.style.display = 'none';
+                                btn.textContent = 'Missing submissions ▾';
+                                return;
+                            }
+
+                            // Show & set loading state
+                            wrap.style.display = '';
+                            status.style.display = '';
+                            status.textContent = 'Loading…';
+                            content.style.display = 'none';
+                            content.innerHTML = '';
+
+                            try {
+                                // ↓ Fetch all counts and render color-coded list
+                                const items = await fetchTeamSubmissionCountsForChallenge(challengeId);
+
+                                status.style.display = 'none';
+                                content.style.display = '';
+
+                                const html = `
+            <div class="muted">
+                Submission status by team
+                (${items.filter(i => i.count === 0).length} missing / ${items.length} total)
+            </div>
+            <div class="count-list">
+                ${items.map(({ team, count }) => {
+                                    const cls = (count === 0) ? 'missing' : (count > 0 ? 'ok' : '');
+                                    const countText = (count >= 0) ? String(count) : '—';
+                                    return `
+                        <div class="count-item ${cls}">
+                            <span class="name">${escapeHtml(team.teamName)}</span>
+                            <span class="num">${countText}</span>
+                        </div>
+                    `;
+                                }).join('')}
+            </div>
+            <div class="row" style="margin-top:0.5rem">
+                <button class="btn ghost" data-action="refresh-zero" data-id="${challengeId}">↻ Refresh list</button>
+            </div>
+        `;
+                                content.innerHTML = html;
+
+                                btn.textContent = 'Missing submissions ▴';
+                            } catch (e) {
+                                status.style.display = '';
+                                status.textContent = 'Error loading team counts.';
+                                console.error(e);
+                            }
+                        } else if (action === 'refresh-zero') {
+                            const btn = card.querySelector(`button[data-action="toggle-zero"][data-id="${challengeId}"]`);
+                            if (btn) { (/** @type {HTMLButtonElement} */(btn)).click(); }
 
                         } else if (action === 'count') {
                             /** @type {HTMLSelectElement|null} */
