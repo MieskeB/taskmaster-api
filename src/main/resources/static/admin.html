@@ -153,6 +153,11 @@
             border-color: #ffccd1;
             color: #8a0010;
         }
+
+        .card.past {
+            background: #fff5f6;
+            border-color: #ffd6db;
+        }
     </style>
 </head>
 <body>
@@ -405,12 +410,35 @@
                 const qs = new URLSearchParams({adminCode: store.code}).toString();
                 /** @type {Challenge[]} */
                 const data = await http('/challenge/all?' + qs);
+
+                // ✅ Sort challenges by start date (earliest first)
+                data.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+
+                // ✅ Determine which past challenge is the most recent (will not be colored)
+                const nowMs = Date.now();
+                const past = data.filter(c => new Date(c.startDate).getTime() < nowMs);
+
+                /** @type {number|null} */
+                let exemptPastId = null;
+                if (past.length > 0) {
+                    const mostRecentPast = past.reduce((latest, cur) =>
+                        new Date(cur.startDate).getTime() > new Date(latest.startDate).getTime() ? cur : latest
+                    );
+                    exemptPastId = mostRecentPast.id;
+                }
+
                 challengesList.innerHTML = '';
                 data.forEach(c => {
                     const card = document.createElement('div');
                     card.className = 'card';
-                    const selectId = 'teamSelect-' + c.id;
 
+                    // ✅ Make past challenges light red, except the most recent past one
+                    const isPast = new Date(c.startDate).getTime() < nowMs;
+                    if (isPast && c.id !== exemptPastId) {
+                        card.classList.add('past');
+                    }
+
+                    const selectId = 'teamSelect-' + c.id;
                     const options = state.teams.length
                         ? state.teams.map(t => `<option value="${t.id}">${escapeHtml(t.teamName)}</option>`).join('')
                         : '<option disabled selected>— load teams first —</option>';
@@ -443,7 +471,6 @@
     <div id="zero-list-content-${c.id}" style="display:none"></div>
   </div>
 `;
-
                     card.addEventListener('click', async (ev) => {
                         const t = /** @type {HTMLElement} */(ev.target);
                         const idAttr = t.getAttribute('data-id');
