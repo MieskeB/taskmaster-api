@@ -158,6 +158,10 @@
             background: #fff5f6;
             border-color: #ffd6db;
         }
+        .card.current {
+            background: #eaf8ea;   /* light green */
+            border-color: #bfe5bf; /* soft green border */
+        }
     </style>
 </head>
 <body>
@@ -432,10 +436,14 @@
                     const card = document.createElement('div');
                     card.className = 'card';
 
-                    // ✅ Make past challenges light red, except the most recent past one
+                    // ✅ Color logic: current (most recent past) = green; other past = light red
                     const isPast = new Date(c.startDate).getTime() < nowMs;
-                    if (isPast && c.id !== exemptPastId) {
-                        card.classList.add('past');
+                    if (isPast) {
+                        if (c.id === exemptPastId) {
+                            card.classList.add('current');
+                        } else {
+                            card.classList.add('past');
+                        }
                     }
 
                     const selectId = 'teamSelect-' + c.id;
